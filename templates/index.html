@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Webcam Frame Capture</title>
+</head>
+<body>
+    <h1>Webcam Frame Capture</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <button id="startCapture">Start Capture</button>
+    <button id="stopCapture">Stop Capture</button>
+    <script>
+        let video = document.getElementById('video');
+        let captureInterval;
+        let serialNumber = 0;
+        const fps = 30; // Target frames per second
+
+        async function startWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+            } catch (error) {
+                console.error("Error accessing the webcam", error);
+            }
+        }
+
+        function startCapture() {
+            captureInterval = setInterval(() => {
+                captureFrame();
+            }, 1000 / fps); // Calculate interval time based on the desired fps
+        }
+
+        function captureFrame() {
+            let canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            let ctx = canvas.getContext('2d');
+            
+            // Draw the current frame from the video onto the canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // You can now use canvas.toDataURL() to get the image data
+            let imageData = canvas.toDataURL('image/png');
+            sendData(imageData);
+            // Optionally, remove the canvas to free memory, if you don't need it anymore
+            // canvas.remove();
+        }
+
+        function stopCapture() {
+            if (captureInterval) clearInterval(captureInterval);
+            let tracks = video.srcObject.getTracks();
+            tracks.forEach(track => track.stop()); // Stop all tracks to stop the webcam
+            video.srcObject = null;
+        }
+
+        async function sendData(dataUrl) {
+            if (dataUrl) {
+                let timestamp = new Date().toISOString(); // ISO 8601 format
+                serialNumber += 1;
+
+                let dataToSend = {
+                    serialNumber: serialNumber,
+                    timestamp: timestamp,
+                    dataUrl: dataUrl
+                };
+
+                console.log(dataToSend);
+                fetch('http://127.0.0.1:5000/upload', {
+                    method: 'POST',
+                    body: JSON.stringify(dataToSend), 
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(response => response.json()) // Assuming JSON response
+                .then(result => console.log(result))
+                .catch(error => console.error('Error:', error));
+            }
+        }
+
+
+        document.getElementById('startCapture').addEventListener('click', () => {
+            startWebcam();
+            startCapture();
+        });
+
+        document.getElementById('stopCapture').addEventListener('click', stopCapture);
+    </script>
+</body>
+</html>

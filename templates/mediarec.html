@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Webcam Snapshot and Recording</title>
+</head>
+<body>
+    <h1>Video stream</h1>
+    <p>
+        <button onclick="startWebcam();">Start WebCam</button>
+        <button onclick="stopWebcam();">Stop WebCam</button>
+    </p>
+    <video width="400" height="400" id="video" controls autoplay></video>
+    
+    <script>
+        let videoElement;
+        let webcamStream;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let serialNumber = 0;
+
+        async function startWebcam() {
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: false 
+                });
+                
+                videoElement = document.getElementById('video');
+                videoElement.srcObject = webcamStream;
+                
+                setupRecorder();
+                startRecording();
+            } catch (err) {
+                console.error("The following error occurred: ", err);
+            }
+        }
+
+        function setupRecorder() {
+            if (!webcamStream) {
+                console.error('No media stream available');
+                return;
+            }
+
+            mediaRecorder = new MediaRecorder(webcamStream);
+            mediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) {
+                    logArrayBytes(event.data);
+                }
+            };
+        }
+
+        function startRecording() {
+            if (!mediaRecorder) {
+                console.error('MediaRecorder not set up.');
+                return;
+            }
+
+            recordedChunks = []; // Reset previously recorded chunks
+            serialNumber = 0;
+            mediaRecorder.start(1000);
+            console.log('Recording started');
+        }
+
+        function stopRecording() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                console.error('MediaRecorder not recording.');
+                return;
+            }
+
+            mediaRecorder.stop();
+            console.log('Recording stopped');
+        }
+
+        function arrayBufferToBase64(buffer) {
+            var binary = '';
+            var bytes = new Uint8Array(buffer);
+            var len = bytes.byteLength;
+            for (var i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+
+
+        function logArrayBytes(blobData) {
+            const reader = new FileReader();
+            let timestamp = new Date().toISOString(); // ISO 8601 format
+            serialNumber += 1;
+
+            reader.onloadend = () => {
+                const dataUrl = reader.result;
+
+                let dataToSend = {
+                    serialNumber: serialNumber,
+                    timestamp: timestamp,
+                    dataUrl: dataUrl
+                };
+
+                console.log(dataToSend);
+                fetch('http://127.0.0.1:5000/upload', {
+                    method: 'POST',
+                    body: JSON.stringify(dataToSend), 
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                })
+                .then(response => response.json()) // Assuming JSON response
+                .then(result => console.log(result))
+                .catch(error => console.error('Error:', error));
+            };
+            reader.readAsDataURL(blobData);
+        }
+
+        function stopWebcam() {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                stopRecording(); 
+            }
+        }
+    </script>
+</body>
+</html>
